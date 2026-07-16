@@ -46,11 +46,22 @@ async function toCompressedDataUrl(file: File, maxSize = 800): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.6);
 }
 
-// 위치 획득: GPS → EXIF 순서로 시도, 둘 다 실패하면 null (사용자 직접 입력 유도)
+// 위치 획득: 사진 EXIF GPS(사진이 찍힌 위치)를 최우선으로, 없으면 현재 위치로 폴백.
+// 갤러리에서 과거 사진을 올려도 실제 촬영 지점으로 신고되게 한다.
+// 둘 다 실패하면 null → 사용자 직접 입력 유도.
 async function getLocation(
   file: File
 ): Promise<{ lat: number; lng: number } | null> {
-  // 1순위: 브라우저 Geolocation (현재 위치)
+  // 1순위: 사진 EXIF GPS 태그 (촬영 위치)
+  try {
+    const exifr = (await import("exifr")).default;
+    const gps = await exifr.gps(file);
+    if (gps?.latitude && gps?.longitude) {
+      return { lat: gps.latitude, lng: gps.longitude };
+    }
+  } catch {}
+
+  // 2순위 폴백: 브라우저 Geolocation (현재 위치 — 방금 찍은 사진이라고 가정)
   try {
     const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
       navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -60,20 +71,13 @@ async function getLocation(
     );
     return { lat: pos.coords.latitude, lng: pos.coords.longitude };
   } catch {
-    // 2순위 폴백: 사진 EXIF GPS 태그
-    try {
-      const exifr = (await import("exifr")).default;
-      const gps = await exifr.gps(file);
-      if (gps?.latitude && gps?.longitude) {
-        return { lat: gps.latitude, lng: gps.longitude };
-      }
-    } catch {}
     return null;
   }
 }
 
 export default function ReportPage() {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null); // 카메라 촬영용
+  const galleryRef = useRef<HTMLInputElement>(null); // 갤러리 선택용
   const [phase, setPhase] = useState<Phase>("idle");
   const [preview, setPreview] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -211,6 +215,7 @@ export default function ReportPage() {
     setAddressQuery("");
     setAddressError("");
     if (inputRef.current) inputRef.current.value = "";
+    if (galleryRef.current) galleryRef.current.value = "";
   }
 
   return (
@@ -234,12 +239,23 @@ export default function ReportPage() {
       )}
 
       {phase === "idle" && (
-        <button
-          onClick={() => inputRef.current?.click()}
-          className="w-full max-w-sm rounded-2xl bg-amber-400 py-16 text-xl font-bold text-black active:scale-95 transition-all"
-        >
-          📸 위험 요소 촬영하기
-        </button>
+        <div className="w-full max-w-sm space-y-3">
+          <button
+            onClick={() => inputRef.current?.click()}
+            className="w-full rounded-2xl bg-amber-400 py-14 text-xl font-bold text-black active:scale-95 transition-all"
+          >
+            📸 위험 요소 촬영하기
+          </button>
+          <button
+            onClick={() => galleryRef.current?.click()}
+            className="w-full rounded-2xl border border-zinc-700 bg-zinc-800 py-4 font-semibold text-zinc-200 active:scale-95 transition-all"
+          >
+            🖼️ 갤러리에서 선택
+          </button>
+          <p className="text-center text-[11px] text-zinc-500">
+            갤러리 사진은 촬영된 위치(EXIF)로 신고됩니다
+          </p>
+        </div>
       )}
 
       {phase === "analyzing" && (
@@ -463,6 +479,13 @@ export default function ReportPage() {
         type="file"
         accept="image/*"
         capture="environment"
+        hidden
+        onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+      />
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*"
         hidden
         onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
       />

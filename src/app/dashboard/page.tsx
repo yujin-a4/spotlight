@@ -41,6 +41,7 @@ export default function DashboardPage() {
   const [selected, setSelected] = useState<Report | null>(null);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
+  const [showQr, setShowQr] = useState(false);
 
   async function generateBriefing() {
     setBriefingLoading(true);
@@ -173,8 +174,28 @@ export default function DashboardPage() {
           >
             마커
           </button>
+          <button
+            onClick={() => setShowQr(true)}
+            className="rounded-lg bg-zinc-700 px-3 py-1 text-sm"
+            title="폰으로 신고 페이지 열기"
+          >
+            📱 QR
+          </button>
         </div>
       </div>
+
+      {showQr && (
+        <div
+          onClick={() => setShowQr(false)}
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/80 p-6"
+        >
+          <img src="/qr.png" alt="접속 QR 코드" className="w-80 rounded-xl" />
+          <p className="text-lg font-bold text-white">
+            📸 지금 폰으로 스캔해서 직접 신고해 보세요!
+          </p>
+          <p className="text-xs text-zinc-400">(화면을 누르면 닫힘)</p>
+        </div>
+      )}
 
       {/* 신고 리스트 */}
       <aside className="flex w-96 flex-col gap-3 overflow-y-auto p-4">

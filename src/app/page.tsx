@@ -84,6 +84,7 @@ export default function ReportPage() {
   const [tempReport, setTempReport] = useState<TempReport | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const [addressQuery, setAddressQuery] = useState("");
   const [addressError, setAddressError] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -490,14 +491,33 @@ export default function ReportPage() {
         onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
       />
 
-      <div className="flex gap-4">
+      <div className="flex items-center gap-4">
         <a href="/my" className="text-xs text-amber-400/80 underline">
           📋 내 신고 내역
         </a>
         <a href="/dashboard" className="text-xs text-zinc-500 underline">
           관제 대시보드 →
         </a>
+        <button
+          onClick={() => setShowQr(true)}
+          className="text-xs text-zinc-500 underline"
+        >
+          📱 QR 보기
+        </button>
       </div>
+
+      {showQr && (
+        <div
+          onClick={() => setShowQr(false)}
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/80 p-6"
+        >
+          <img src="/qr.png" alt="접속 QR 코드" className="w-64 rounded-xl" />
+          <p className="text-center text-sm text-zinc-300">
+            폰 카메라로 스캔하면 바로 신고할 수 있어요
+          </p>
+          <p className="text-xs text-zinc-500">(화면을 누르면 닫힘)</p>
+        </div>
+      )}
     </main>
   );
 }

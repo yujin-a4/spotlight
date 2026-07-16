@@ -18,6 +18,9 @@ interface TempReport {
   category: Category;
   severity: Severity;
   description: string;
+  suggestedAction: string; // 공무원 대시보드 전용 — 시민 UI에는 표시하지 않음
+  department: string;
+  riskNote: string;
   lat: number;
   lng: number;
   address: string;
@@ -147,6 +150,9 @@ export default function ReportPage() {
         category: analysis.category,
         severity: analysis.severity,
         description: analysis.description,
+        suggestedAction: analysis.suggestedAction ?? "",
+        department: analysis.department ?? "기타",
+        riskNote: analysis.riskNote ?? "",
         lat: location?.lat ?? 0,
         lng: location?.lng ?? 0,
         address, // ""이면 위치 미확인 → 사용자 직접 입력 필요
@@ -178,6 +184,9 @@ export default function ReportPage() {
         category: tempReport.category,
         severity: tempReport.severity,
         description: tempReport.description,
+        suggestedAction: tempReport.suggestedAction,
+        department: tempReport.department,
+        riskNote: tempReport.riskNote,
         lat: tempReport.lat,
         lng: tempReport.lng,
         address: tempReport.address,

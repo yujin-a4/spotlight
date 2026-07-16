@@ -7,6 +7,10 @@ export interface AnalysisResult {
   category: Category;
   severity: Severity;
   description: string;
+  // AI 조치 처방 (공무원 대시보드 전용 표시)
+  suggestedAction?: string;
+  department?: string;
+  riskNote?: string;
 }
 
 export interface Report extends AnalysisResult {

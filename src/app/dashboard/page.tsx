@@ -14,8 +14,10 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import {
+  Category,
   CATEGORY_LABEL,
   Report,
+  Severity,
   SEVERITY_COLOR,
   SEVERITY_LABEL,
   SEVERITY_WEIGHT,
@@ -42,6 +44,14 @@ export default function DashboardPage() {
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [sevFilter, setSevFilter] = useState<Severity | "ALL">("ALL");
+  const [catFilter, setCatFilter] = useState<Category | "ALL">("ALL");
+
+  const filtered = reports.filter(
+    (r) =>
+      (sevFilter === "ALL" || r.severity === sevFilter) &&
+      (catFilter === "ALL" || r.category === catFilter)
+  );
 
   async function generateBriefing() {
     setBriefingLoading(true);
@@ -104,7 +114,7 @@ export default function DashboardPage() {
     markersRef.current = [];
     circlesRef.current = [];
 
-    for (const r of reports) {
+    for (const r of filtered) {
       if (mode === "marker") {
         const marker = new window.google.maps.Marker({
           map,
@@ -138,7 +148,7 @@ export default function DashboardPage() {
         }
       }
     }
-  }, [reports, mode, mapReady]);
+  }, [reports, mode, mapReady, sevFilter, catFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function focusReport(r: Report) {
     setSelected(r);
@@ -200,8 +210,60 @@ export default function DashboardPage() {
       {/* 신고 리스트 */}
       <aside className="flex w-96 flex-col gap-3 overflow-y-auto p-4">
         <h2 className="text-lg font-bold">
-          실시간 신고 <span className="text-amber-400">{reports.length}</span>건
+          실시간 신고 <span className="text-amber-400">{filtered.length}</span>
+          <span className="text-sm font-normal text-zinc-400">
+            {" "}/ {reports.length}건
+          </span>
         </h2>
+
+        {/* 필터: 심각도 */}
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setSevFilter("ALL")}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              sevFilter === "ALL" ? "bg-white text-black" : "bg-zinc-800 text-zinc-300"
+            }`}
+          >
+            전체
+          </button>
+          {(["HIGH", "MEDIUM", "LOW"] as const).map((sev) => (
+            <button
+              key={sev}
+              onClick={() => setSevFilter(sevFilter === sev ? "ALL" : sev)}
+              style={
+                sevFilter === sev
+                  ? { backgroundColor: SEVERITY_COLOR[sev], color: "#000" }
+                  : {}
+              }
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                sevFilter === sev ? "" : "bg-zinc-800 text-zinc-300"
+              }`}
+            >
+              {SEVERITY_LABEL[sev]}{" "}
+              {reports.filter((r) => r.severity === sev).length}
+            </button>
+          ))}
+        </div>
+
+        {/* 필터: 카테고리 */}
+        <div className="flex flex-wrap gap-1.5">
+          {(["POTHOLE", "BROKEN_FACILITY", "TRASH", "OTHER"] as const).map(
+            (cat) => (
+              <button
+                key={cat}
+                onClick={() => setCatFilter(catFilter === cat ? "ALL" : cat)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  catFilter === cat
+                    ? "bg-amber-400 text-black"
+                    : "bg-zinc-800 text-zinc-300"
+                }`}
+              >
+                {CATEGORY_LABEL[cat]}{" "}
+                {reports.filter((r) => r.category === cat).length}
+              </button>
+            )
+          )}
+        </div>
 
         {/* AI 관제 브리핑 */}
         <button
@@ -217,11 +279,11 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {reports.length === 0 && (
-          <p className="text-sm text-zinc-500">아직 접수된 신고가 없습니다.</p>
+        {filtered.length === 0 && (
+          <p className="text-sm text-zinc-500">조건에 맞는 신고가 없습니다.</p>
         )}
 
-        {reports.map((r) => (
+        {filtered.map((r) => (
           <div
             key={r.id}
             onClick={() => focusReport(r)}
@@ -250,6 +312,11 @@ export default function DashboardPage() {
                 {r.address && (
                   <p className="mt-1 text-xs text-zinc-500">📍 {r.address}</p>
                 )}
+                {r.department && (
+                  <span className="mt-1 inline-block rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
+                    🏢 {r.department}
+                  </span>
+                )}
               </div>
             </div>
             {selected?.id === r.id && (
@@ -259,6 +326,15 @@ export default function DashboardPage() {
                   alt="현장 사진 확대"
                   className="w-full rounded-lg"
                 />
+                {r.suggestedAction && (
+                  <div className="space-y-1 rounded-lg bg-zinc-900 p-2.5 text-xs">
+                    <p className="font-bold text-indigo-300">🤖 AI 조치 처방</p>
+                    <p className="text-zinc-300">🛠 {r.suggestedAction}</p>
+                    {r.riskNote && (
+                      <p className="text-zinc-400">⚠️ 방치 시: {r.riskNote}</p>
+                    )}
+                  </div>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

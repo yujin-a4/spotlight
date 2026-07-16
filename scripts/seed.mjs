@@ -39,18 +39,19 @@ const ANCHORS = [
   [37.5714, 127.0090, 2, "동대문/신당"],
 ];
 
+// [category, severity, description, suggestedAction, department, riskNote]
 const POOL = [
-  ["POTHOLE", "HIGH", "차도 대형 포트홀"],
-  ["POTHOLE", "HIGH", "포트홀 다수 발생"],
-  ["POTHOLE", "MEDIUM", "도로 균열 및 침하"],
-  ["POTHOLE", "MEDIUM", "아스팔트 파임 발생"],
-  ["BROKEN_FACILITY", "HIGH", "보도블럭 심한 파손"],
-  ["BROKEN_FACILITY", "MEDIUM", "보도 단차 위험"],
-  ["BROKEN_FACILITY", "MEDIUM", "인도 포장 들뜸"],
-  ["BROKEN_FACILITY", "LOW", "보도블럭 일부 균열"],
-  ["TRASH", "MEDIUM", "쓰레기 무단투기 적치"],
-  ["TRASH", "LOW", "생활쓰레기 방치"],
-  ["TRASH", "LOW", "골목 쓰레기 투기"],
+  ["POTHOLE", "HIGH", "차도 대형 포트홀", "아스팔트 긴급 패칭, 안전콘 설치 권장", "도로관리과", "차량 타이어 파손 및 추돌 사고 우려"],
+  ["POTHOLE", "HIGH", "포트홀 다수 발생", "구간 전면 재포장 검토 필요", "도로관리과", "이륜차 전도 등 인명 사고 우려"],
+  ["POTHOLE", "MEDIUM", "도로 균열 및 침하", "균열 실링 및 침하부 보수", "도로관리과", "우천 시 포트홀로 확대 우려"],
+  ["POTHOLE", "MEDIUM", "아스팔트 파임 발생", "부분 패칭 보수 필요", "도로관리과", "차량 하부 손상 우려"],
+  ["BROKEN_FACILITY", "HIGH", "보도블럭 심한 파손", "보도블럭 교체 및 임시 안전펜스 설치", "시설관리과", "보행자 낙상 사고 우려"],
+  ["BROKEN_FACILITY", "MEDIUM", "보도 단차 위험", "단차 평탄화 작업 필요", "시설관리과", "노약자·유모차 통행 시 전도 우려"],
+  ["BROKEN_FACILITY", "MEDIUM", "인도 포장 들뜸", "들뜬 포장재 재시공 필요", "시설관리과", "보행자 걸려 넘어짐 우려"],
+  ["BROKEN_FACILITY", "LOW", "보도블럭 일부 균열", "정기 보수 시 교체 권장", "시설관리과", "균열 확대 시 파손 우려"],
+  ["TRASH", "MEDIUM", "쓰레기 무단투기 적치", "수거 조치 및 단속 카메라 검토", "환경미화과", "악취·해충 발생 및 추가 투기 유발"],
+  ["TRASH", "LOW", "생활쓰레기 방치", "수거 조치 필요", "환경미화과", "도시 미관 저해 및 투기 상습화 우려"],
+  ["TRASH", "LOW", "골목 쓰레기 투기", "수거 및 경고문 부착 권장", "환경미화과", "상습 투기 구역화 우려"],
 ];
 
 const jitter = () => (Math.random() - 0.5) * 0.004; // 약 ±200m
@@ -67,6 +68,35 @@ async function geocode(lat, lng) {
   }
 }
 
+// 기존 시드 데이터(seed == true) 일괄 삭제
+async function purgeSeeds() {
+  const res = await fetch(`${BASE}:runQuery?key=${API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: "reports" }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: "seed" },
+            op: "EQUAL",
+            value: { booleanValue: true },
+          },
+        },
+        limit: 500,
+      },
+    }),
+  });
+  const rows = await res.json();
+  const names = rows.filter((r) => r.document).map((r) => r.document.name);
+  for (const name of names) {
+    await fetch(`https://firestore.googleapis.com/v1/${name}?key=${API_KEY}`, {
+      method: "DELETE",
+    });
+  }
+  console.log(`기존 시드 ${names.length}건 삭제`);
+}
+
 async function createReport(doc) {
   const res = await fetch(`${BASE}/reports?key=${API_KEY}`, {
     method: "POST",
@@ -76,6 +106,9 @@ async function createReport(doc) {
         category: { stringValue: doc.category },
         severity: { stringValue: doc.severity },
         description: { stringValue: doc.description },
+        suggestedAction: { stringValue: doc.suggestedAction },
+        department: { stringValue: doc.department },
+        riskNote: { stringValue: doc.riskNote },
         lat: { doubleValue: doc.lat },
         lng: { doubleValue: doc.lng },
         address: { stringValue: doc.address },
@@ -89,20 +122,23 @@ async function createReport(doc) {
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
 }
 
+await purgeSeeds();
+
 let n = 0;
 for (const [alat, alng, count, area] of ANCHORS) {
   for (let i = 0; i < count; i++) {
-    const [category, severity, description] = POOL[Math.floor(Math.random() * POOL.length)];
+    const [category, severity, description, suggestedAction, department, riskNote] =
+      POOL[Math.floor(Math.random() * POOL.length)];
     const lat = alat + jitter();
     const lng = alng + jitter();
     const address = await geocode(lat, lng);
     const createdAt = new Date(Date.now() - Math.random() * 48 * 3600 * 1000).toISOString();
     await createReport({
-      category, severity, description, lat, lng, address,
-      imageUrl: IMAGES[category], createdAt,
+      category, severity, description, suggestedAction, department, riskNote,
+      lat, lng, address, imageUrl: IMAGES[category], createdAt,
     });
     n++;
-    console.log(`[${n}] ${area} | ${description} (${severity}) | ${address}`);
+    console.log(`[${n}] ${area} | ${description} (${severity}) | ${department} | ${address}`);
   }
 }
 console.log(`\n완료: ${n}건 생성`);

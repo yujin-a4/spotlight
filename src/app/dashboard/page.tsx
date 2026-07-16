@@ -131,8 +131,9 @@ export default function DashboardPage() {
         marker.addListener("click", () => setSelected(r));
         markersRef.current.push(marker);
       } else {
-        // 히트맵: 심각도 가중치에 비례한 반투명 원 레이어
-        const weight = SEVERITY_WEIGHT[r.severity];
+        // 히트맵: 심각도 × 누적 신고 횟수(최대 3배)에 비례한 반투명 원 레이어
+        const weight =
+          SEVERITY_WEIGHT[r.severity] * Math.min(r.reportCount ?? 1, 3);
         for (let i = weight; i >= 1; i--) {
           circlesRef.current.push(
             new window.google.maps.Circle({
@@ -312,11 +313,18 @@ export default function DashboardPage() {
                 {r.address && (
                   <p className="mt-1 text-xs text-zinc-500">📍 {r.address}</p>
                 )}
-                {r.department && (
-                  <span className="mt-1 inline-block rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
-                    🏢 {r.department}
-                  </span>
-                )}
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {r.department && (
+                    <span className="inline-block rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
+                      🏢 {r.department}
+                    </span>
+                  )}
+                  {(r.reportCount ?? 1) >= 2 && (
+                    <span className="inline-block rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">
+                      🔁 {r.reportCount}회 신고
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             {selected?.id === r.id && (

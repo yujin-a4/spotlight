@@ -19,6 +19,7 @@ export interface Report extends AnalysisResult {
   lat: number;
   lng: number;
   address?: string;
+  reportCount?: number; // 동일 위험 누적 신고 횟수 (AI 중복 병합)
   status: "OPEN" | "RESOLVED";
   createdAt: { seconds: number } | null;
 }

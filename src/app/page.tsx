@@ -91,6 +91,7 @@ export default function ReportPage() {
   const [addressQuery, setAddressQuery] = useState("");
   const [addressError, setAddressError] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [dupCount, setDupCount] = useState<number | null>(null);
 
   // 주소 직접 입력 → 정방향 지오코딩으로 좌표 확정
   async function searchAddress() {
@@ -180,6 +181,38 @@ export default function ReportPage() {
     setIsSubmitting(true);
 
     try {
+      // AI 중복 판별: 근처(60m)의 동일 위험이 이미 신고돼 있으면 병합
+      const dedupRes = await fetch("/api/dedup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageDataUrl: tempReport.imageUrl,
+          lat: tempReport.lat,
+          lng: tempReport.lng,
+          category: tempReport.category,
+          severity: tempReport.severity,
+        }),
+      });
+      const dedup = await dedupRes.json();
+
+      if (dedup.duplicate) {
+        const mine = JSON.parse(localStorage.getItem("myReportIds") ?? "[]");
+        if (!mine.includes(dedup.reportId)) {
+          localStorage.setItem(
+            "myReportIds",
+            JSON.stringify([dedup.reportId, ...mine])
+          );
+        }
+        setDupCount(dedup.reportCount);
+        setResult({
+          category: tempReport.category,
+          severity: tempReport.severity,
+          description: tempReport.description,
+        });
+        setPhase("done");
+        return;
+      }
+
       const docRef = await addDoc(collection(db, "reports"), {
         category: tempReport.category,
         severity: tempReport.severity,
@@ -192,6 +225,7 @@ export default function ReportPage() {
         address: tempReport.address,
         imageUrl: tempReport.imageUrl,
         status: "OPEN",
+        reportCount: 1,
         createdAt: serverTimestamp(),
       });
 
@@ -224,6 +258,7 @@ export default function ReportPage() {
     setEditingAddress(false);
     setAddressQuery("");
     setAddressError("");
+    setDupCount(null);
     if (inputRef.current) inputRef.current.value = "";
     if (galleryRef.current) galleryRef.current.value = "";
   }
@@ -438,7 +473,21 @@ export default function ReportPage() {
 
       {phase === "done" && result && (
         <div className="w-full max-w-sm rounded-2xl bg-zinc-800 p-5 text-center">
-          <p className="text-lg font-bold text-amber-400">✅ 신고 완료!</p>
+          {dupCount ? (
+            <>
+              <p className="text-lg font-bold text-sky-400">
+                🔁 이미 접수된 위험이에요
+              </p>
+              <p className="mt-1 text-xs text-zinc-400">
+                AI가 기존 신고와 같은 위험 요소로 판별해 병합했어요.
+                <br />
+                누적 신고 <b className="text-sky-300">{dupCount}회</b> — 대응
+                우선순위가 올라갑니다!
+              </p>
+            </>
+          ) : (
+            <p className="text-lg font-bold text-amber-400">✅ 신고 완료!</p>
+          )}
           <div className="mt-3 space-y-1 text-sm">
             <p>
               분류: <b>{CATEGORY_LABEL[result.category]}</b>

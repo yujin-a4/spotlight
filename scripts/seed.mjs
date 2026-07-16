@@ -114,6 +114,7 @@ async function createReport(doc) {
         address: { stringValue: doc.address },
         imageUrl: { stringValue: doc.imageUrl },
         status: { stringValue: "OPEN" },
+        reportCount: { integerValue: String(doc.reportCount ?? 1) },
         createdAt: { timestampValue: doc.createdAt },
         seed: { booleanValue: true }, // 시드 데이터 표시 (일괄 삭제용)
       },
@@ -124,21 +125,40 @@ async function createReport(doc) {
 
 await purgeSeeds();
 
+// 같은 앵커 지역에서 같은 카테고리가 중복 추첨되면 별건이 아니라
+// 하나의 신고로 병합(reportCount 누적, 심각도는 최고치)한다.
+// — 실제 서비스의 AI 중복 병합을 거친 상태를 재현.
+const SEV_RANK = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+
 let n = 0;
 for (const [alat, alng, count, area] of ANCHORS) {
+  const groups = new Map(); // category → 병합된 신고 1건
   for (let i = 0; i < count; i++) {
     const [category, severity, description, suggestedAction, department, riskNote] =
       POOL[Math.floor(Math.random() * POOL.length)];
-    const lat = alat + jitter();
-    const lng = alng + jitter();
-    const address = await geocode(lat, lng);
-    const createdAt = new Date(Date.now() - Math.random() * 48 * 3600 * 1000).toISOString();
-    await createReport({
-      category, severity, description, suggestedAction, department, riskNote,
-      lat, lng, address, imageUrl: IMAGES[category], createdAt,
-    });
+    const existing = groups.get(category);
+    if (existing) {
+      existing.reportCount += 1;
+      if (SEV_RANK[severity] > SEV_RANK[existing.severity]) {
+        existing.severity = severity;
+      }
+    } else {
+      groups.set(category, {
+        category, severity, description, suggestedAction, department, riskNote,
+        lat: alat + jitter(), lng: alng + jitter(), reportCount: 1,
+      });
+    }
+  }
+
+  for (const doc of groups.values()) {
+    doc.address = await geocode(doc.lat, doc.lng);
+    doc.createdAt = new Date(Date.now() - Math.random() * 48 * 3600 * 1000).toISOString();
+    doc.imageUrl = IMAGES[doc.category];
+    await createReport(doc);
     n++;
-    console.log(`[${n}] ${area} | ${description} (${severity}) | ${department} | ${address}`);
+    console.log(
+      `[${n}] ${area} | ${doc.description} (${doc.severity}) x${doc.reportCount} | ${doc.department} | ${doc.address}`
+    );
   }
 }
-console.log(`\n완료: ${n}건 생성`);
+console.log(`\n완료: ${n}건 생성 (병합 반영)`);
